@@ -1,0 +1,185 @@
+#version 330 core
+
+uniform vec2 iResolution;
+uniform float iTime;
+uniform vec3 pos;
+uniform float uYaw;
+uniform float uPitch;
+uniform float uScroll;
+
+out vec4 color;
+
+vec3 camera = vec3(0, 0, 0);
+
+struct Sphere {
+    vec3 center;
+    float r;
+    vec3 color;
+};
+struct Box {
+    vec3 center;
+    vec3 size;
+    vec3 color;
+};
+struct Plane {
+    float height;
+    vec3 color;
+};
+
+Sphere spheres[2];
+Box boxes[2];
+Plane planes[1];
+
+vec3 light = normalize(vec3(0.45, -1, 1));
+
+vec3 skyColor = vec3(0.4, 0.45, 0.71);
+
+const float MAX_DIST = 99999.0;
+
+vec2 sphIntersect(in vec3 origin, in vec3 dir, in vec3 center, float radius)
+{
+    vec3 oc = origin - center;
+    float b = dot(oc, dir);
+    float c = dot(oc, oc) - radius * radius;
+    float h = b * b - c;
+    if(h < 0.0) return vec2(-1.0);
+    h = sqrt(h);
+    return vec2(-b - h, -b + h);
+}
+
+vec2 boxIntersection( in vec3 ro, in vec3 rd, vec3 boxSize, out vec3 oNormal ) 
+{
+    vec3 m = 1.0/rd;
+    vec3 n = m*ro;
+    vec3 k = abs(m)*boxSize;
+    vec3 t1 = -n - k;
+    vec3 t2 = -n + k;
+    float tN = max( max( t1.x, t1.y ), t1.z );
+    float tF = min( min( t2.x, t2.y ), t2.z );
+    if( tN>tF || tF<0.0) return vec2(-1.0);
+    oNormal = (tN>0.0) ? step(vec3(tN),t1) :
+                           step(t2,vec3(tF));
+    oNormal *= -sign(rd);
+    return vec2( tN, tF );
+}
+
+float plaIntersect( in vec3 ro, in vec3 rd, in vec4 p )
+{
+    return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+}
+
+vec4 ray(inout vec3 origin, inout vec3 dir, out float brightness) {
+    vec2 tMin = vec2(MAX_DIST);
+    vec2 t;
+    vec3 normal;
+    vec4 col;
+    for(int i = 0; i < spheres.length(); i++) {
+        t = sphIntersect(origin, dir, spheres[i].center, spheres[i].r);
+        if (t.x > 0.0 && t.x < tMin.x) {
+            tMin = t;
+            vec3 hit = origin + dir * t.x;
+            normal = normalize(hit - spheres[i].center);
+            col = vec4(spheres[i].color, 1.0);
+        }   
+    }
+    for(int i = 0; i < boxes.length(); i++) {
+        vec3 boxNormal;
+        t = boxIntersection(origin - boxes[i].center, dir, boxes[i].size, boxNormal);
+        if (t.x > 0.0 && t.x < tMin.x) {
+            tMin = t;
+            normal = boxNormal;
+            col = vec4(boxes[i].color, 1.0);
+        }
+    }
+    for(int i = 0; i < planes.length(); i++) {
+        vec3 planeNormal = vec3(0, 1, 0);
+        t = vec2(plaIntersect(origin, dir, vec4(planeNormal, -planes[i].height)));
+        if (t.x > 0.0 && t.x < tMin.x) {
+            tMin = t;
+            normal = planeNormal;
+            float fogFactor = exp(-t.x * 0.001);
+            float k = clamp(fogFactor + 0.1, 0.8, 1.0);
+            col = vec4(planes[i].color * k, 1.0);
+        }
+    }
+    
+    if (tMin.x < MAX_DIST && tMin.x > 0.0) {
+        origin += dir * tMin.x + normal * 0.00001;
+        dir = reflect(dir, normal);
+        brightness = max(0.0, dot(-light, normal));
+    } else {
+        vec3 viewDir = normalize(-dir);
+        vec3 reflectDir = reflect(light, normal);
+        float spec = pow(max(0.0, dot(reflectDir, viewDir)), 32.0);
+        col = vec4(vec3(skyColor + spec / 1.5), -2.0);
+    }
+    return col;
+}
+
+vec3 rotate(vec3 dir, float angle, bool xz) {
+    float sin = sin(angle);
+    float cos = cos(angle);
+
+    return xz ? vec3(dir.x * cos - dir.z * sin,  dir.y, dir.x * sin + dir.z * cos) :
+                vec3(dir.x, dir.y * cos - dir.z * sin, dir.y * sin + dir.z * cos);
+}
+
+vec3 trace(in vec3 dir) {
+    vec3 result = vec3(0.0);
+    vec3 throughput = vec3(1.0);
+    vec3 origin = camera;
+
+    for(int i = 0; i < 100; i++) {
+        float brightness;
+        vec4 localColor = ray(origin, dir, brightness);
+        
+        if (localColor.a != -2.0) {
+            
+            vec3 hitPoint = origin;
+            vec3 lightDir = -light;
+            vec3 colorChange = throughput * localColor.rgb * brightness;
+            result += colorChange * (ray(hitPoint, lightDir, brightness).a != -2.0 ? 0.3 : 1.0);
+            
+            throughput *= localColor.rgb * 0.5;
+        } else {
+            float sunFactor = max(0.0, dot(dir, -light) * 0.5 + 0.48);
+            vec3 sky = skyColor * (0.4 + sunFactor * 0.3);
+            vec3 sun = vec3(1.0, 0.95, 0.9) * pow(sunFactor, 100.0) * 20.0;
+            result += throughput * (sky + sun);
+            return result;
+        }
+    }
+    return result;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / iResolution.xy - 0.5;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+
+    light = normalize(vec3(0.45, -(sin(iTime / 5)), -cos(iTime / 5)));
+
+    spheres[0] = Sphere(vec3(1.0, -4.5, -15.0), 1.0,
+                        vec3(0.9, 0.91, 0.33));
+    spheres[1] = Sphere(vec3(2.0, 0, -5.0), 1.0,
+                        vec3(1.0, 0.27, 0.27));
+    
+    boxes[0] = Box(vec3(-2.0, -4.0, -15.0),
+                    vec3(1.0, 2.0, 3.0),
+                    vec3(0.12, 1.0, 0.51));
+    
+    boxes[1] = Box(vec3(4.0, -2.5, -5.0),
+                    vec3(1.0, 5.0, 1.0),
+                    vec3(0.5, 0.8, (sin(iTime) * 0.5 + 0.5)));
+
+    planes[0] = Plane(-5.0, vec3(0.21, 0.45, 0.91));
+
+    camera = pos;
+    spheres[1].center = pos;
+
+    vec3 startDir = normalize(vec3(uv.xy, -uScroll));
+    vec3 dir = rotate(startDir, uPitch, false);
+    dir = rotate(dir, uYaw, true);
+    
+    color = vec4(trace(dir), 1.0);
+}

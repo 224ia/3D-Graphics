@@ -9,9 +9,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.Vector;
 
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
@@ -30,14 +27,14 @@ public class Main {
     private final int WIDTH = 1920;
     private final int HEIGHT = 1080;
 
-    private boolean[] keys = new boolean[6];
+    private final boolean[] keys = new boolean[6];
 
     private final Vector3f pos = new Vector3f(0, 0, 0);
     private final float SPEED = 0.1f;
 
     private float scroll = 1.0f;
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         new Main().run();
     }
 
@@ -83,11 +80,10 @@ public class Main {
     private void setupMouse() {
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-        glfwSetScrollCallback(window, (win, xoffset, yoffset) -> {
-            scroll = (float) Math.clamp(scroll + yoffset / 3.5f, 1f, 4f);
-        });
+        glfwSetScrollCallback(window, (_, _, yoffset) ->
+                scroll = (float) Math.clamp(scroll + yoffset / 3.5f, 1f, 4f));
 
-        glfwSetCursorPosCallback(window, (win, xpos, ypos) -> {
+        glfwSetCursorPosCallback(window, (_, xpos, ypos) -> {
             double deltaX = xpos - lastMouseX;
             double deltaY = ypos - lastMouseY;
 
@@ -102,7 +98,7 @@ public class Main {
             lastMouseY = ypos;
         });
 
-        glfwSetKeyCallback(window, (win, key, scancode, action, mods) -> {
+        glfwSetKeyCallback(window, (win, key, _, action, _) -> {
             int i = switch (key) {
                 case GLFW_KEY_W -> 0;
                 case GLFW_KEY_S -> 1;
@@ -149,7 +145,7 @@ public class Main {
 
     private void loadShader() {
         String vertexSource = readShader("Vertex.vert");
-        String fragmentSource = readShader("RayCasting.fraq");
+        String fragmentSource = readShader("RayTracing.fraq");
 
         if (vertexSource.isEmpty() || fragmentSource.isEmpty()) {
             throw new RuntimeException("Failed to load shaders");
