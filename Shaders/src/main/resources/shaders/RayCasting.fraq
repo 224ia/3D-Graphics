@@ -1,0 +1,140 @@
+#version 330 core
+
+uniform vec2 iResolution;
+uniform float iTime;
+uniform vec3 pos;
+uniform float uYaw;
+uniform float uPitch;
+uniform float uScroll;
+
+out vec4 color;
+
+vec3 camera = vec3(0, 0, 0);
+
+struct Sphere {
+    vec3 center;
+    float r;
+};
+struct Box {
+    vec3 center;
+    vec3 size;
+};
+struct Plane {
+    float height;
+};
+
+Sphere sphere = Sphere(vec3(1.0, -4.5, -15.0), 1.0);
+Box box = Box(vec3(-2.0, -4.0, -15.0),
+                vec3(1.0, 2.0, 3.0));
+Plane plane = Plane(-5.0);
+
+vec3 light = normalize(vec3(0.45, -0.25, 1));
+
+vec3 skyColor = vec3(0.4, 0.45, 0.71);
+
+const float MAX_DIST = 99999.0;
+
+vec2 sphIntersect(in vec3 origin, in vec3 dir, in vec3 center, float radius)
+{
+    vec3 oc = origin - center;
+    float b = dot(oc, dir);
+    float c = dot(oc, oc) - radius * radius;
+    float h = b * b - c;
+    if(h < 0.0) return vec2(-1.0);
+    h = sqrt(h);
+    return vec2(-b - h, -b + h);
+}
+
+vec2 boxIntersection( in vec3 ro, in vec3 rd, vec3 boxSize, out vec3 oNormal ) 
+{
+    vec3 m = 1.0/rd; // can precompute if traversing a set of aligned boxes
+    vec3 n = m*ro;   // can precompute if traversing a set of aligned boxes
+    vec3 k = abs(m)*boxSize;
+    vec3 t1 = -n - k;
+    vec3 t2 = -n + k;
+    float tN = max( max( t1.x, t1.y ), t1.z );
+    float tF = min( min( t2.x, t2.y ), t2.z );
+    if( tN>tF || tF<0.0) return vec2(-1.0); // no intersection
+    oNormal = (tN>0.0) ? step(vec3(tN),t1) : // ro ouside the box
+                           step(t2,vec3(tF));  // ro inside the box
+    oNormal *= -sign(rd);
+    return vec2( tN, tF );
+}
+
+float plaIntersect( in vec3 ro, in vec3 rd, in vec4 p )
+{
+    return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+}
+
+vec3 ray(in vec3 origin, in vec3 dir, out vec2 tMin, out vec3 normal) {
+    tMin = vec2(MAX_DIST);
+    vec2 t;
+    vec3 col;
+    t = sphIntersect(origin, dir, sphere.center, sphere.r);
+    if (t.x > 0.0 && t.x < tMin.x) {
+        tMin = t;
+        vec3 hit = origin + dir * t.x;
+        normal = normalize(hit - sphere.center);
+        col = vec3(0.91, 0.54, 0.33);
+    }
+    vec3 boxNormal;
+    t = boxIntersection(origin - box.center, dir, box.size, boxNormal);
+    if (t.x > 0.0 && t.x < tMin.x) {
+        tMin = t;
+        normal = boxNormal;
+        col = vec3(0.12, 1.0, 0.51);
+    }
+    vec3 planeNormal = vec3(0, 1, 0);
+    t = vec2(plaIntersect(origin, dir, vec4(planeNormal, -plane.height)));
+    if (t.x > 0.0 && t.x < tMin.x) {
+        tMin = t;
+        normal = planeNormal;
+        float fogFactor = exp(-t.x * 0.001);
+        float k = clamp(fogFactor + 0.1, 0.8, 1.0);
+        col = vec3(0.21, 0.45, 0.91) * k;
+    }
+    if (tMin.x < MAX_DIST && tMin.x > 0.001) {
+        vec3 hit = origin + dir * tMin.x;
+        float brightness = (dot(-light, normal) * 0.5 + 0.5) * 0.9 + 0.1;
+        col = vec3(brightness * col);
+    } else {
+        vec3 viewDir = normalize(-dir);
+        vec3 reflectDir = reflect(light, normal);
+        float spec = pow(max(0.0, dot(reflectDir, viewDir)), 32.0);
+        col = skyColor + spec / 1.5;
+    }
+    return col;
+}
+
+vec3 rotate(vec3 dir, float angle, bool xz) {
+    float sin = sin(angle);
+    float cos = cos(angle);
+
+    return xz ? vec3(dir.x * cos - dir.z * sin,  dir.y, dir.x * sin + dir.z * cos) :
+                vec3(dir.x, dir.y * cos - dir.z * sin, dir.y * sin + dir.z * cos);
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / iResolution.xy - 0.5;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+
+    light = normalize(vec3(0.45, -abs(sin(iTime / 5)), -cos(iTime / 5)));
+
+    camera = pos;
+
+    vec3 startDir = normalize(vec3(uv.xy, -uScroll));
+    vec3 dir = rotate(startDir, uPitch, false);
+    dir = rotate(dir, uYaw, true);
+    vec2 t;
+    vec3 normal;
+    vec3 col = ray(camera, dir, t, normal);
+    if (t.x < MAX_DIST && t.x > 0.0 && dot(normal, -light) > 0.0) {
+        vec3 hit = camera + dir * t.x + normal * 0.0001;
+        vec3 hitColor = ray(hit, -light, t, normal);
+        if (t.x < MAX_DIST && t.x > 0.0) {
+            col *= 0.5;
+        }
+    }
+    color = vec4(col, 1.0);
+}
