@@ -145,7 +145,7 @@ public class Main {
 
     private void loadShader() {
         String vertexSource = readShader("Vertex.vert");
-        String fragmentSource = readShader("RayTracing.fraq");
+        String fragmentSource = readShader("RayMarching.fraq");
 
         if (vertexSource.isEmpty() || fragmentSource.isEmpty()) {
             throw new RuntimeException("Failed to load shaders");
