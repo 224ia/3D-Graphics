@@ -1,0 +1,120 @@
+#version 330 core
+
+uniform vec2 iResolution;
+uniform float iTime;
+uniform float sceneData[512];
+uniform int objectCount;
+uniform vec3 lightDir;
+uniform vec3 pos;
+uniform float uYaw;
+uniform float uPitch;
+uniform float uScroll;
+
+out vec4 color;
+
+vec3 camera = vec3(0, 0, 0);
+
+vec3 skyColor = vec3(0.4, 0.45, 0.71);
+
+float distToSphere(in vec3 origin, in vec3 center, in float radius) {
+    return length(center - origin) - radius;
+}
+
+float distToBox(in vec3 origin, in vec3 center, in vec3 size) {
+    vec3 q = abs(origin - center) - size;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float distToPlane(in vec3 origin, in float height) {
+    return (origin.y - height);
+}
+
+float sdTorus( vec3 p, vec2 t )
+{
+  vec2 q = vec2(length(p.xz)-t.x,p.y);
+  return length(q)-t.y;
+}
+
+float closest(in vec3 origin, out vec3 col) {
+    float tMin = 99999.0;
+    float t;
+    for(int i = 0; i < objectCount; i++) {
+        int offset = i * 8;
+        float type = sceneData[offset];
+        vec3 pos = vec3(sceneData[offset+1], sceneData[offset+2], sceneData[offset+3]);
+        vec3 colr = vec3(sceneData[offset+4], sceneData[offset+5], sceneData[offset+6]);
+        float size = sceneData[offset+7];
+        
+        if (type == 0.0) {
+            t = distToSphere(origin, pos, size);
+        } else if (type == 1.0) {
+            t = distToBox(origin, pos, vec3(size));
+        } else if (type == 2.0) {
+            t = distToPlane(origin, pos.y);
+        }
+        if (t < tMin) {
+            tMin = t;
+            col = colr;
+        }
+    }
+    return tMin;
+}
+
+vec3 getNormal(vec3 p)
+{
+    vec3 col; // no need but I create to put in parameters
+    float d = closest(p, col);
+    vec2 e = vec2(0.001, 0);
+    vec3 n = d - vec3(closest(p - e.xyy, col), closest(p - e.yxy, col), closest(p - e.yyx, col));
+    return normalize(n);
+}
+
+vec4 march(in vec3 dir, inout vec3 origin) {
+    for(int i = 0; i < 1000; i++) {
+        vec3 col;
+        float step = closest(origin, col);
+        if (step > 500) break;
+        origin += dir * step;
+        if (step <= 0.01) {
+            return vec4(col, 1.0);
+        }
+    }
+    vec3 sun = vec3(1) * pow(max(dot(dir, -lightDir), 0.0),32.0) * 20;
+    vec3 col = vec3(skyColor + sun / 11.5);
+    return vec4(col, 0.0);
+}
+
+float getLight(in vec3 hit) {
+    vec3 normal = getNormal(hit);
+    float brightness = max(0.0, dot(-lightDir, normal));
+    vec3 origin = hit + normal * 0.025;
+    if (march(-lightDir, origin).a != 0.0) brightness *= 0.3;
+    return brightness;
+}
+
+vec3 rotate(vec3 dir, float angle, bool xz) {
+    float sin = sin(angle);
+    float cos = cos(angle);
+
+    return xz ? vec3(dir.x * cos - dir.z * sin,  dir.y, dir.x * sin + dir.z * cos) :
+                vec3(dir.x, dir.y * cos - dir.z * sin, dir.y * sin + dir.z * cos);
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / iResolution.xy - 0.5;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+
+    camera = pos;
+
+    vec3 startDir = normalize(vec3(uv.xy, -uScroll));
+    vec3 dir = rotate(startDir, uPitch, false);
+    dir = rotate(dir, uYaw, true);
+    
+    vec3 origin = camera;
+    vec4 col = march(dir, origin);
+    if (col.a == 1.0) {
+        col.rgb *= getLight(origin);
+    }
+    color = vec4(col.rgb, 1.0);
+}
