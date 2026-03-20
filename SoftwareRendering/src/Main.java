@@ -39,6 +39,8 @@ public class Main extends JPanel {
         camera = new Camera(new Vector3f(0, 0, 0), input, mouse, 0.1f);
 
         gameImage = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+        // Test Objects
+        // Params: position, rotation, size, color, ArrayList of polygons or path to obj file
         objects.add(new Object(new Vector3f(3, 3, 5), new Vector3f(0, 0, 180), new Vector3f(1, 1, 1), new Color(0.9f, 0.9f, 0.9f), "Gun.obj"));
         objects.add(new Object(new Vector3f(8, 3, 5), new Vector3f(0, 0, 180), new Vector3f(1, 1, 1), new Color(0.9f, 0.9f, 0.9f), "Player.obj"));
 
