@@ -1,26 +1,23 @@
+package Software;
+
+import Util.MouseProcessing;
+
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 
-public class MouseProcessing implements MouseMotionListener {
-    private float yaw = 0;
-    private float pitch = 0;
-
-    private static final float SENSITIVITY = 0.005f;
-
-    private boolean mouseLocked = false;
-
+public final class SoftwareMouse extends MouseProcessing implements MouseMotionListener, MouseWheelListener {
     private final JFrame frame;
     private Robot robot;
     private Point centerPoint;
 
-    public MouseProcessing(JFrame frame) {
+    private boolean mouseLocked = false;
+
+    public SoftwareMouse(JFrame frame) {
         this.frame = frame;
         frame.addMouseMotionListener(this);
+        frame.addMouseWheelListener(this);
 
         try {
             robot = new Robot();
@@ -69,14 +66,6 @@ public class MouseProcessing implements MouseMotionListener {
         }
     }
 
-    public float getYaw() {
-        return yaw;
-    }
-
-    public float getPitch() {
-        return pitch;
-    }
-
     @Override
     public void mouseDragged(MouseEvent e) {
     }
@@ -87,13 +76,18 @@ public class MouseProcessing implements MouseMotionListener {
             int deltaX = e.getX() - centerPoint.x;
             int deltaY = e.getY() - centerPoint.y;
 
-            yaw += deltaX * SENSITIVITY;
-            pitch -= deltaY * SENSITIVITY;
+            yaw += deltaX * MouseProcessing.SENSITIVITY;
+            pitch -= deltaY * MouseProcessing.SENSITIVITY;
 
             float maxPitch = (float) (Math.PI / 2 - 0.1);
             pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
 
             centerMouse();
         }
+    }
+
+    @Override
+    public void mouseWheelMoved(MouseWheelEvent e) {
+        scroll += e.getWheelRotation();
     }
 }

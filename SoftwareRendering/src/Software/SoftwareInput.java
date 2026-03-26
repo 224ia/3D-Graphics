@@ -1,8 +1,17 @@
+package Software;
+
+import Util.Input;
+
+import javax.swing.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
-public class Input implements KeyListener {
+public final class SoftwareInput extends Input implements KeyListener {
     private final boolean[] keys = new boolean[Keys.values().length];
+
+    public SoftwareInput(JFrame frame) {
+        frame.addKeyListener(this);
+    }
 
     public boolean isKeyPressed(Keys key) {
         return keys[key.getIndex()];
